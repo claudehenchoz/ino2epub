@@ -3,10 +3,10 @@ import logging
 import sys
 from .converter import Ino2Epub
 
-def setup_logging():
+def setup_logging(debug: bool = False):
     """Configure logging for the application"""
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG if debug else logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S',
         handlers=[
@@ -38,9 +38,15 @@ def main():
         default="articles.epub",
         help="Output EPUB file path (default: articles.epub)"
     )
+
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable debug logging"
+    )
     
     args = parser.parse_args()
-    setup_logging()
+    setup_logging(args.debug)
     
     try:
         converter = Ino2Epub(
