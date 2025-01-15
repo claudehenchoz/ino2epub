@@ -171,7 +171,7 @@ class Ino2Epub:
             elif ext == 'svg+xml':
                 ext = 'svg'
             filename = hashlib.md5(src.encode()).hexdigest()[:10] + '.' + ext
-            image_path = f'EPUB/images/{chapter_id}/{filename}'
+            image_path = f'images/{chapter_id}/{filename}'
             
             # Create image item
             image_item = epub.EpubItem(
@@ -194,18 +194,63 @@ class Ino2Epub:
         
         return str(soup)
 
+    def _create_cover(self, book: epub.EpubBook) -> epub.EpubHtml:
+        """Create a cover page"""
+        # Download cover image
+        response = requests.get("https://upload.wikimedia.org/wikipedia/commons/a/a8/Inoreader_icon.png")
+        if response.status_code == 200:
+            cover_img = epub.EpubItem(
+                uid="cover_img",
+                file_name="images/cover.png",
+                media_type="image/png",
+                content=response.content
+            )
+            book.add_item(cover_img)
+        
+        # Create cover HTML
+        cover = epub.EpubHtml(
+            title='Cover',
+            file_name='cover.xhtml',
+            lang='en'
+        )
+        
+        cover.content = '''<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
+<head>
+    <title>Cover</title>
+    <style type="text/css">
+        img {{ max-width: 100%; display: block; margin: 0 auto; }}
+        .title {{ text-align: center; margin: 2em 0; }}
+        .date {{ text-align: center; margin: 1em 0; }}
+    </style>
+</head>
+<body>
+    <div>
+        <img src="images/cover.png" alt="Inoreader Logo"/>
+        <h1 class="title">Inoreader: Read Later</h1>
+        <p class="date">Compiled on {}</p>
+    </div>
+</body>
+</html>'''.format(datetime.now().strftime('%Y-%m-%d'))
+        
+        return cover
+
     def create_epub(self, items: List[Dict], output_path: str = "articles.epub"):
         """Create EPUB file from RSS items"""
         logger.info("Creating EPUB file")
         book = epub.EpubBook()
+        book.EPUB_VERSION = "2.0"
         
         # Set book metadata
         book.set_identifier(f"ino2epub-{datetime.now().strftime('%Y%m%d%H%M%S')}")
         book.set_title(f"Read Later Articles - {datetime.now().strftime('%Y-%m-%d')}")
         book.set_language("en")
         
+        # Add cover
+        cover = self._create_cover(book)
+        book.add_item(cover)
+        
         chapters = []
-        spine = ["nav"]
+        spine = ['cover']
         
         # Create chapters for each article
         for i, item in enumerate(items):
@@ -237,9 +282,24 @@ class Ino2Epub:
                 # Create chapter
                 chapter = epub.EpubHtml(
                     title=title,
-                file_name=f"EPUB/article_{i+1}.xhtml",
-                    content=f"<h1>{title}</h1>\n{processed_content}"
+                    file_name=f'article_{i+1}.xhtml',
+                    lang='en'
                 )
+                
+                chapter.content = f'''<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
+<head>
+    <title>{title}</title>
+</head>
+<body>
+    <div class="chapter">
+        <h1>{title}</h1>
+        <div class="content">
+            {processed_content}
+        </div>
+    </div>
+</body>
+</html>'''
+                
                 book.add_item(chapter)
                 chapters.append(chapter)
                 spine.append(chapter)
@@ -248,14 +308,46 @@ class Ino2Epub:
                 logger.error(f"Error processing item {i+1}: {str(e)}")
                 continue
         
-        # Add navigation files
+        # Create EPUB2 navigation
+        nav = epub.EpubHtml(
+            title='Table of Contents',
+            file_name='toc.xhtml',
+            lang='en'
+        )
+        
+        # Build TOC content
+        nav_content = '''<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
+<head>
+    <title>Table of Contents</title>
+</head>
+<body>
+    <div class="toc">
+        <h1>Table of Contents</h1>
+        <div class="toc-entries">'''
+        
+        for chapter in chapters:
+            nav_content += f'''
+            <div class="toc-entry">
+                <a href="{chapter.file_name}">{chapter.title}</a>
+            </div>'''
+            
+        nav_content += '''
+        </div>
+    </div>
+</body>
+</html>'''
+        
+        nav.content = nav_content
+        book.add_item(nav)
+        
+        # Add NCX file for EPUB2 compatibility
         book.add_item(epub.EpubNcx())
-        book.add_item(epub.EpubNav())
         
         # Create table of contents
         book.toc = [(epub.Section("Articles"), chapters)]
         
-        # Set the spine
+        # Set the spine with TOC
+        spine.insert(1, nav)  # Add TOC after cover but before chapters
         book.spine = spine
         
         # Write the EPUB file

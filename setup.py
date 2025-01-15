@@ -10,7 +10,7 @@ setup(
         "ebooklib",
         "requests>=2.31.0",
         "beautifulsoup4>=4.12.0",
-        "lxml_html_clean>=5.3.0",
+        "lxml_html_clean>=0.4.1",
     ],
     entry_points={
         'console_scripts': [
