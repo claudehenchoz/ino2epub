@@ -29,13 +29,13 @@ def main():
     parser.add_argument(
         "--max-items",
         type=int,
-        default=10,
+        default=20,
         help="Maximum number of items to fetch (default: 10)"
     )
     
     parser.add_argument(
         "--user-agent",
-        default="Mozilla/5.0",
+        default="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.3",
         help="User Agent string to use for requests"
     )
     
