@@ -25,18 +25,12 @@ def main():
         required=True,
         help="Inoreader RSS feed URL for read later items"
     )
-    
+
     parser.add_argument(
         "--max-items",
         type=int,
         default=20,
-        help="Maximum number of items to fetch (default: 10)"
-    )
-    
-    parser.add_argument(
-        "--user-agent",
-        default="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.3",
-        help="User Agent string to use for requests"
+        help="Maximum number of items to fetch (default: 20)"
     )
     
     parser.add_argument(
@@ -51,8 +45,7 @@ def main():
     try:
         converter = Ino2Epub(
             rss_url=args.url,
-            max_items=args.max_items,
-            user_agent=args.user_agent
+            max_items=args.max_items
         )
         
         output_path = converter.convert(args.output)

@@ -16,23 +16,25 @@ logger = logging.getLogger(__name__)
 class Ino2Epub:
     """Main converter class for transforming Inoreader RSS items to EPUB"""
     
+    USER_AGENTS = [
+        "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.3"
+    ]
+
     def __init__(
         self,
         rss_url: str,
-        max_items: int = 10,
-        user_agent: str = "Mozilla/5.0"
+        max_items: int = 20
     ):
         """
         Initialize the converter with configuration parameters
         
         Args:
             rss_url: Inoreader RSS feed URL
-            max_items: Maximum number of items to fetch (default: 10)
-            user_agent: User Agent string for requests (default: Mozilla/5.0)
+            max_items: Maximum number of items to fetch (default: 20)
         """
         self.rss_url = rss_url
         self.max_items = max_items
-        self.user_agent = user_agent  # Used for both RSS and article fetching
 
     def fetch_rss_items(self) -> List[Dict]:
         """Fetch RSS items from Inoreader"""
@@ -92,33 +94,36 @@ class Ino2Epub:
             raise ValueError(f"Failed to fetch RSS items: {str(e)}")
 
     def extract_article_content(self, url: str) -> Optional[str]:
-        """Extract article content using trafilatura"""
+        """Extract article content using trafilatura with fallback user agents"""
         logger.info(f"Extracting content from {url}")
-        try:
-            # First fetch the content using requests
-            response = requests.get(url, headers={'User-Agent': self.user_agent})
-            if response.status_code != 200:
-                logger.warning(f"Failed to download content from {url}, status code: {response.status_code}")
-                return None
+        
+        for user_agent in self.USER_AGENTS:
+            try:
+                logger.debug(f"Trying with user agent: {user_agent}")
+                response = requests.get(url, headers={'User-Agent': user_agent})
+                if response.status_code != 200:
+                    logger.warning(f"Failed to download content from {url}, status code: {response.status_code}")
+                    continue
 
-            # Then extract the content using trafilatura
-            content = trafilatura.extract(
-                response.text,
-                include_images=True,
-                include_formatting=True,
-                output_format='html',
-                with_metadata=False
-            )
-            
-            if not content:
-                logger.warning(f"No content could be extracted from {url}")
-                return None
+                content = trafilatura.extract(
+                    response.text,
+                    include_images=True,
+                    include_formatting=True,
+                    output_format='html',
+                    with_metadata=False
+                )
                 
-            return content
-            
-        except Exception as e:
-            logger.error(f"Error extracting content from {url}: {str(e)}")
-            return None
+                if content:
+                    return content
+                else:
+                    logger.debug(f"No content extracted with user agent: {user_agent}")
+                    
+            except Exception as e:
+                logger.error(f"Error extracting content from {url} with user agent {user_agent}: {str(e)}")
+                continue
+        
+        logger.warning(f"Failed to extract content from {url} with all user agents")
+        return None
 
     def _download_image(self, url: str, base_url: str) -> Optional[Tuple[bytes, str]]:
         """Download an image and return its content and mime type"""
@@ -127,7 +132,7 @@ class Ino2Epub:
             if not bool(urlparse(url).netloc):
                 url = urljoin(base_url, url)
                 
-            response = requests.get(url, headers={'User-Agent': self.user_agent})
+            response = requests.get(url, headers={'User-Agent': self.USER_AGENTS[0]})
             if response.status_code != 200:
                 return None
             
