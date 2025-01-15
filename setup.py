@@ -9,6 +9,7 @@ setup(
         "trafilatura",
         "ebooklib",
         "requests>=2.31.0",
+        "beautifulsoup4>=4.12.0",
     ],
     entry_points={
         'console_scripts': [

@@ -2,10 +2,14 @@ import feedparser
 import trafilatura
 import ebooklib
 from ebooklib import epub
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Tuple
 import logging
 from datetime import datetime
 import os
+import requests
+from urllib.parse import urljoin, urlparse
+from bs4 import BeautifulSoup
+import hashlib
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +95,6 @@ class Ino2Epub:
         """Extract article content using trafilatura"""
         logger.info(f"Extracting content from {url}")
         try:
-            import requests
             # First fetch the content using requests
             response = requests.get(url, headers={'User-Agent': self.user_agent})
             if response.status_code != 200:
@@ -116,6 +119,75 @@ class Ino2Epub:
         except Exception as e:
             logger.error(f"Error extracting content from {url}: {str(e)}")
             return None
+
+    def _download_image(self, url: str, base_url: str) -> Optional[Tuple[bytes, str]]:
+        """Download an image and return its content and mime type"""
+        try:
+            # Resolve relative URLs
+            if not bool(urlparse(url).netloc):
+                url = urljoin(base_url, url)
+                
+            response = requests.get(url, headers={'User-Agent': self.user_agent})
+            if response.status_code != 200:
+                return None
+            
+            content_type = response.headers.get('content-type', '')
+            if not content_type.startswith('image/'):
+                return None
+                
+            return response.content, content_type
+        except Exception as e:
+            logger.error(f"Error downloading image from {url}: {str(e)}")
+            return None
+
+    def _process_content_images(self, content: str, book: epub.EpubBook, chapter_id: str, article_url: str) -> str:
+        """Process images in content, download them and update references"""
+        
+        soup = BeautifulSoup(content, 'html.parser')
+        
+        # Handle both <img> and <graphic> tags
+        for img in soup.find_all(['img', 'graphic']):
+            src = img.get('src')
+            if not src:
+                continue
+                
+            # Download the image
+            result = self._download_image(src, article_url)
+            if not result:
+                continue
+                
+            image_content, mime_type = result
+            
+            # Generate a unique filename based on URL
+            ext = mime_type.split('/')[-1].lower()
+            # Handle special cases
+            if ext == 'jpeg':
+                ext = 'jpg'
+            elif ext == 'svg+xml':
+                ext = 'svg'
+            filename = hashlib.md5(src.encode()).hexdigest()[:10] + '.' + ext
+            image_path = f'EPUB/images/{chapter_id}/{filename}'
+            
+            # Create image item
+            image_item = epub.EpubItem(
+                uid=f'image_{filename}',
+                file_name=image_path,
+                media_type=mime_type,
+                content=image_content
+            )
+            book.add_item(image_item)
+            
+            # Convert graphic elements to img elements and update references
+            if img.name == 'graphic':
+                new_img = soup.new_tag('img')
+                new_img['src'] = f'images/{chapter_id}/{filename}'
+                if img.get('alt'):
+                    new_img['alt'] = img['alt']
+                img.replace_with(new_img)
+            else:
+                img['src'] = f'images/{chapter_id}/{filename}'
+        
+        return str(soup)
 
     def create_epub(self, items: List[Dict], output_path: str = "articles.epub"):
         """Create EPUB file from RSS items"""
@@ -151,11 +223,17 @@ class Ino2Epub:
                     logger.warning(f"No content extracted for article: {title}")
                     continue
                 
+                # Create unique ID for chapter
+                chapter_id = f'chapter_{i+1}'
+                
+                # Process images in content
+                processed_content = self._process_content_images(content, book, chapter_id, url)
+                
                 # Create chapter
                 chapter = epub.EpubHtml(
                     title=title,
-                    file_name=f"article_{i+1}.xhtml",
-                    content=f"<h1>{title}</h1>\n{content}"
+                file_name=f"EPUB/article_{i+1}.xhtml",
+                    content=f"<h1>{title}</h1>\n{processed_content}"
                 )
                 book.add_item(chapter)
                 chapters.append(chapter)
