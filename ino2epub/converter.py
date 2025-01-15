@@ -171,7 +171,7 @@ class Ino2Epub:
             elif ext == 'svg+xml':
                 ext = 'svg'
             filename = hashlib.md5(src.encode()).hexdigest()[:10] + '.' + ext
-            image_path = f'EPUB/images/{chapter_id}/{filename}'
+            image_path = f'images/{chapter_id}/{filename}'
             
             # Create image item
             image_item = epub.EpubItem(
@@ -185,12 +185,12 @@ class Ino2Epub:
             # Convert graphic elements to img elements and update references
             if img.name == 'graphic':
                 new_img = soup.new_tag('img')
-                new_img['src'] = f'images/{chapter_id}/{filename}'
+                new_img['src'] = f'../images/{chapter_id}/{filename}'
                 if img.get('alt'):
                     new_img['alt'] = img['alt']
                 img.replace_with(new_img)
             else:
-                img['src'] = f'images/{chapter_id}/{filename}'
+                img['src'] = f'../images/{chapter_id}/{filename}'
         
         return str(soup)
 
@@ -201,21 +201,21 @@ class Ino2Epub:
         if response.status_code == 200:
             # Add cover image
             cover_img = epub.EpubItem(
-                uid='cover-img',
-                file_name='EPUB/images/cover.png',
+                uid='cover-image',
+                file_name='images/cover.png',
                 media_type='image/png',
                 content=response.content
             )
             book.add_item(cover_img)
             
             # Add cover metadata
-            book.set_cover('EPUB/images/cover.png', response.content)
+            book.add_metadata(None, 'meta', '', {'name': 'cover', 'content': 'cover-image'})
         
         # Create cover HTML
         cover = epub.EpubHtml(
             uid='cover',
             title='Cover',
-            file_name='EPUB/cover.xhtml',
+            file_name='text/cover.xhtml',
             lang='en'
         )
         
@@ -230,7 +230,7 @@ class Ino2Epub:
 </head>
 <body>
     <div>
-        <img src="images/cover.png" alt="Inoreader Logo"/>
+        <img src="../images/cover.png" alt="Inoreader Logo"/>
         <h1 class="title">Inoreader: Read Later</h1>
         <p class="date">Compiled on {}</p>
     </div>
@@ -287,7 +287,7 @@ class Ino2Epub:
                 # Create chapter
                 chapter = epub.EpubHtml(
                     title=title,
-                    file_name=f'EPUB/article_{i+1}.xhtml',
+                    file_name=f'text/article_{i+1}.xhtml',
                     lang='en'
                 )
                 
@@ -317,7 +317,7 @@ class Ino2Epub:
         nav = epub.EpubHtml(
             uid='nav',
             title='Table of Contents',
-            file_name='EPUB/nav.xhtml',
+            file_name='text/nav.xhtml',
             lang='en'
         )
         
