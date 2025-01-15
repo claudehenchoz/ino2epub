@@ -171,7 +171,7 @@ class Ino2Epub:
             elif ext == 'svg+xml':
                 ext = 'svg'
             filename = hashlib.md5(src.encode()).hexdigest()[:10] + '.' + ext
-            image_path = f'images/{chapter_id}/{filename}'
+            image_path = f'EPUB/images/{chapter_id}/{filename}'
             
             # Create image item
             image_item = epub.EpubItem(
@@ -199,18 +199,23 @@ class Ino2Epub:
         # Download cover image
         response = requests.get("https://upload.wikimedia.org/wikipedia/commons/a/a8/Inoreader_icon.png")
         if response.status_code == 200:
+            # Add cover image
             cover_img = epub.EpubItem(
-                uid="cover_img",
-                file_name="images/cover.png",
-                media_type="image/png",
+                uid='cover-img',
+                file_name='EPUB/images/cover.png',
+                media_type='image/png',
                 content=response.content
             )
             book.add_item(cover_img)
+            
+            # Add cover metadata
+            book.set_cover('EPUB/images/cover.png', response.content)
         
         # Create cover HTML
         cover = epub.EpubHtml(
+            uid='cover',
             title='Cover',
-            file_name='cover.xhtml',
+            file_name='EPUB/cover.xhtml',
             lang='en'
         )
         
@@ -250,7 +255,7 @@ class Ino2Epub:
         book.add_item(cover)
         
         chapters = []
-        spine = ['cover']
+        spine = [cover]
         
         # Create chapters for each article
         for i, item in enumerate(items):
@@ -282,7 +287,7 @@ class Ino2Epub:
                 # Create chapter
                 chapter = epub.EpubHtml(
                     title=title,
-                    file_name=f'article_{i+1}.xhtml',
+                    file_name=f'EPUB/article_{i+1}.xhtml',
                     lang='en'
                 )
                 
@@ -310,8 +315,9 @@ class Ino2Epub:
         
         # Create EPUB2 navigation
         nav = epub.EpubHtml(
+            uid='nav',
             title='Table of Contents',
-            file_name='toc.xhtml',
+            file_name='EPUB/nav.xhtml',
             lang='en'
         )
         
@@ -328,7 +334,7 @@ class Ino2Epub:
         for chapter in chapters:
             nav_content += f'''
             <div class="toc-entry">
-                <a href="{chapter.file_name}">{chapter.title}</a>
+                <a href="{os.path.basename(chapter.file_name)}">{chapter.title}</a>
             </div>'''
             
         nav_content += '''
