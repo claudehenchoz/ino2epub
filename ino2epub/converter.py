@@ -196,20 +196,30 @@ class Ino2Epub:
 
     def _create_cover(self, book: epub.EpubBook) -> epub.EpubHtml:
         """Create a cover page"""
-        # Download cover image
-        response = requests.get("https://upload.wikimedia.org/wikipedia/commons/a/a8/Inoreader_icon.png")
-        if response.status_code == 200:
-            # Add cover image
-            cover_img = epub.EpubItem(
-                uid='cover-image',
-                file_name='images/cover.png',
-                media_type='image/png',
-                content=response.content
-            )
-            book.add_item(cover_img)
-            
-            # Add cover metadata
-            book.add_metadata(None, 'meta', '', {'name': 'cover', 'content': 'cover-image'})
+        logger.info("Creating cover page")
+        
+        # Embedded SVG logo
+        svg_content = '''<?xml version="1.0" encoding="UTF-8"?>
+<svg width="360px" height="360px" viewBox="0 0 360 360" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>inoreader_logo_icon_blue</title>
+    <g id="inoreader_logo_icon_blue" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <path d="M180,66.09375 C242.908685,66.09375 293.90625,117.091315 293.90625,180 C293.90625,242.908685 242.908685,293.90625 180,293.90625 C117.091315,293.90625 66.09375,242.908685 66.09375,180 C66.09375,117.091315 117.091315,66.09375 180,66.09375 Z M214.171875,111.65625 C195.29927,111.65625 180,126.95552 180,145.828125 C180,164.70073 195.29927,180 214.171875,180 C233.04448,180 248.34375,164.70073 248.34375,145.828125 C248.34375,126.95552 233.04448,111.65625 214.171875,111.65625 Z" id="Combined-Shape" fill="#1875F3" fill-rule="nonzero"></path>
+    </g>
+</svg>'''
+        
+        # Add cover image
+        cover_img = epub.EpubItem(
+            uid='cover-image',
+            file_name='images/cover.svg',
+            media_type='image/svg+xml',
+            content=svg_content.encode('utf-8')
+        )
+        logger.debug(f"Created cover image item with path: {cover_img.file_name}")
+        book.add_item(cover_img)
+        
+        # Add cover metadata
+        logger.debug("Adding cover metadata")
+        book.add_metadata(None, 'meta', '', {'name': 'cover', 'content': 'cover-image'})
         
         # Create cover HTML
         cover = epub.EpubHtml(
@@ -230,7 +240,7 @@ class Ino2Epub:
 </head>
 <body>
     <div>
-        <img src="../images/cover.png" alt="Inoreader Logo"/>
+        <img src="../images/cover.svg" alt="Inoreader Logo"/>
         <h1 class="title">Inoreader: Read Later</h1>
         <p class="date">Compiled on {}</p>
     </div>
