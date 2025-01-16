@@ -54,7 +54,7 @@ def main():
             max_items=args.max_items
         )
         
-        output_path = converter.convert(args.output)
+        output_path = converter.convert(args.output, args.debug)
         print(f"Successfully created EPUB file: {output_path}")
         return 0
         

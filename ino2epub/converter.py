@@ -10,6 +10,8 @@ import requests
 from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 import hashlib
+import concurrent.futures
+from functools import partial
 
 logger = logging.getLogger(__name__)
 
@@ -249,7 +251,61 @@ class Ino2Epub:
         
         return cover
 
-    def create_epub(self, items: List[Dict], output_path: str = "articles.epub"):
+    def _process_article(self, item: Dict, index: int, book: epub.EpubBook) -> Optional[Tuple[epub.EpubHtml, int]]:
+        """Process a single article and return its chapter"""
+        try:
+            if not isinstance(item, dict):
+                logger.error(f"Invalid item type: {type(item)}. Item: {item}")
+                return None
+
+            logger.debug(f"Processing item {index+1}: {item}")
+            title = item.get('title', f"Article {index+1}")
+            url = item.get('link')
+            
+            if not url:
+                logger.warning(f"No URL found for article: {title}")
+                return None
+                
+            content = self.extract_article_content(url)
+            if not content:
+                logger.warning(f"No content extracted for article: {title}")
+                return None
+            
+            # Create unique ID for chapter
+            chapter_id = f'chapter_{index+1}'
+            
+            # Process images in content
+            processed_content = self._process_content_images(content, book, chapter_id, url)
+            
+            # Create chapter
+            chapter = epub.EpubHtml(
+                title=title,
+                file_name=f'text/article_{index+1}.xhtml',
+                lang='en'
+            )
+            
+            chapter.content = f'''<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
+<head>
+    <title>{title}</title>
+</head>
+<body>
+    <div class="chapter">
+        <h1>{title}</h1>
+        <div class="content">
+            {processed_content}
+        </div>
+    </div>
+</body>
+</html>'''
+            
+            book.add_item(chapter)
+            return chapter, index
+            
+        except Exception as e:
+            logger.error(f"Error processing item {index+1}: {str(e)}")
+            return None
+
+    def create_epub(self, items: List[Dict], output_path: str = "articles.epub", debug: bool = False):
         """Create EPUB file from RSS items"""
         logger.info("Creating EPUB file")
         book = epub.EpubBook()
@@ -266,62 +322,38 @@ class Ino2Epub:
         
         chapters = []
         spine = [cover]
-        
-        # Create chapters for each article
-        for i, item in enumerate(items):
-            try:
-                # Ensure item is a dictionary
-                if not isinstance(item, dict):
-                    logger.error(f"Invalid item type: {type(item)}. Item: {item}")
-                    continue
 
-                logger.debug(f"Processing item {i+1}: {item}")
-                title = item.get('title', f"Article {i+1}")
-                url = item.get('link')
+        # Process articles either sequentially (debug) or in parallel
+        if debug:
+            # Sequential processing for debug mode
+            for i, item in enumerate(items):
+                result = self._process_article(item, i, book)
+                if result:
+                    chapter, _ = result
+                    chapters.append(chapter)
+        else:
+            # Parallel processing with max 10 concurrent tasks
+            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+                # Create partial function with book argument
+                process_func = partial(self._process_article, book=book)
+                # Submit all tasks
+                future_to_item = {executor.submit(process_func, item, i): i 
+                                for i, item in enumerate(items)}
                 
-                if not url:
-                    logger.warning(f"No URL found for article: {title}")
-                    continue
-                    
-                content = self.extract_article_content(url)
-                if not content:
-                    logger.warning(f"No content extracted for article: {title}")
-                    continue
+                # Collect results as they complete
+                completed_chapters = []
+                for future in concurrent.futures.as_completed(future_to_item):
+                    result = future.result()
+                    if result:
+                        chapter, index = result
+                        completed_chapters.append((chapter, index))
                 
-                # Create unique ID for chapter
-                chapter_id = f'chapter_{i+1}'
+                # Sort chapters by original index
+                completed_chapters.sort(key=lambda x: x[1])
+                chapters = [chapter for chapter, _ in completed_chapters]
                 
-                # Process images in content
-                processed_content = self._process_content_images(content, book, chapter_id, url)
-                
-                # Create chapter
-                chapter = epub.EpubHtml(
-                    title=title,
-                    file_name=f'text/article_{i+1}.xhtml',
-                    lang='en'
-                )
-                
-                chapter.content = f'''<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
-<head>
-    <title>{title}</title>
-</head>
-<body>
-    <div class="chapter">
-        <h1>{title}</h1>
-        <div class="content">
-            {processed_content}
-        </div>
-    </div>
-</body>
-</html>'''
-                
-                book.add_item(chapter)
-                chapters.append(chapter)
-                spine.append(chapter)
-                
-            except Exception as e:
-                logger.error(f"Error processing item {i+1}: {str(e)}")
-                continue
+        # Add chapters to spine
+        spine.extend(chapters)
         
         # Create EPUB2 navigation
         nav = epub.EpubHtml(
@@ -372,7 +404,7 @@ class Ino2Epub:
         
         return output_path
 
-    def convert(self, output_path: str = "articles.epub") -> str:
+    def convert(self, output_path: str = "articles.epub", debug: bool = False) -> str:
         """
         Main conversion method that orchestrates the entire process
         
@@ -383,4 +415,4 @@ class Ino2Epub:
             Path to the generated EPUB file
         """
         items = self.fetch_rss_items()
-        return self.create_epub(items, output_path)
+        return self.create_epub(items, output_path, debug)
